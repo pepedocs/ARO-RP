@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/sirupsen/logrus"
@@ -351,11 +353,22 @@ func (ocb *openShiftClusterBackend) asyncOperationResultLog(log *logrus.Entry, i
 			"properties.servicePrincipalProfile", "The Azure Red Hat Openshift resource provider service principal has been removed from your tenant. To restore, please unregister and then re-register the Azure Red Hat OpenShift resource provider.")
 	}
 
-	err, ok := backendErr.(*api.CloudError)
-	if ok {
-		resultType := utillog.MapStatusCodeToResultType(err.StatusCode)
-		log = log.WithField("resultType", resultType)
+	var statusCode int
 
+	// Get the HTTP status code and map it to a result type
+	if err, ok := backendErr.(*api.CloudError); ok {
+		statusCode = err.StatusCode
+	} else if err, ok := backendErr.(autorest.DetailedError); ok {
+		if err.Response != nil {
+			statusCode = err.Response.StatusCode
+		}
+	} else if err, ok := backendErr.(*azcore.ResponseError); ok {
+		statusCode = err.StatusCode
+	}
+
+	if statusCode > 0 {
+		resultType := utillog.MapStatusCodeToResultType(statusCode)
+		log = log.WithField("resultType", resultType)
 		if resultType == utillog.SuccessResultType {
 			log.Info("long running operation succeeded")
 			return

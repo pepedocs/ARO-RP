@@ -32,6 +32,8 @@ import (
 	"github.com/Azure/ARO-RP/test/util/deterministicuuid"
 	testlog "github.com/Azure/ARO-RP/test/util/log"
 	"github.com/Azure/ARO-RP/test/util/testliveconfig"
+	acrun "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/go-autorest/autorest"
 )
 
 type backendTestStruct struct {
@@ -538,6 +540,84 @@ func TestAsyncOperationResultLog(t *testing.T) {
 					"resultType":    gomega.Equal(utillog.ServerErrorResultType),
 					"errorDetails":  gomega.ContainSubstring("This is a server error result type"),
 				}},
+		},
+		{
+			name:                     "Server Error Status Code DetailedError With Response",
+			initialProvisioningState: api.ProvisioningStateFailed,
+			backendErr: autorest.NewErrorWithResponse(
+				"packageName",
+				"methodName",
+				&http.Response{StatusCode: 500},
+				"An error message",
+			),
+			wantEntries: []map[string]types.GomegaMatcher{
+				{
+					"LOGKIND":       gomega.Equal("asyncqos"),
+					"operationType": gomega.Equal("Failed"),
+					"resultType":    gomega.Equal(utillog.ServerErrorResultType),
+				},
+			},
+		},
+		{
+			name:                     "User Error Status Code DetailedError With Response",
+			initialProvisioningState: api.ProvisioningStateFailed,
+			backendErr: autorest.NewErrorWithResponse(
+				"packageName",
+				"methodName",
+				&http.Response{StatusCode: 400},
+				"An error message",
+			),
+			wantEntries: []map[string]types.GomegaMatcher{
+				{
+					"LOGKIND":       gomega.Equal("asyncqos"),
+					"operationType": gomega.Equal("Failed"),
+					"resultType":    gomega.Equal(utillog.UserErrorResultType),
+				},
+			},
+		},
+		{
+			name:                     "Server Error Status Code DetailedError No Response",
+			initialProvisioningState: api.ProvisioningStateFailed,
+			backendErr: autorest.NewError(
+				"packageName",
+				"methodName",
+				"An error message",
+			),
+			wantEntries: []map[string]types.GomegaMatcher{
+				{
+					"LOGKIND":       gomega.Equal("asyncqos"),
+					"operationType": gomega.Equal("Failed"),
+					"resultType":    gomega.Equal(utillog.ServerErrorResultType),
+				},
+			},
+		},
+		{
+			name:                     "Server Error Status Code ResponseError",
+			initialProvisioningState: api.ProvisioningStateFailed,
+			backendErr: acrun.NewResponseError(
+				&http.Response{StatusCode: 500},
+			),
+			wantEntries: []map[string]types.GomegaMatcher{
+				{
+					"LOGKIND":       gomega.Equal("asyncqos"),
+					"operationType": gomega.Equal("Failed"),
+					"resultType":    gomega.Equal(utillog.ServerErrorResultType),
+				},
+			},
+		},
+		{
+			name:                     "User Error Status Code ResponseError",
+			initialProvisioningState: api.ProvisioningStateFailed,
+			backendErr: acrun.NewResponseError(
+				&http.Response{StatusCode: 401},
+			),
+			wantEntries: []map[string]types.GomegaMatcher{
+				{
+					"LOGKIND":       gomega.Equal("asyncqos"),
+					"operationType": gomega.Equal("Failed"),
+					"resultType":    gomega.Equal(utillog.UserErrorResultType),
+				},
+			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
